@@ -19,10 +19,28 @@ class Student:
 
     def get_name(self):
         return self.name
+    
     def get_state(self):
         return self.state
+    
     def set_state(self, state):
         self.state = state
+
+    def quest(self, question: list) -> int:
+        rand_num = random.random()
+        probabilities = []
+        n = len(question)
+        res = n - 1
+        for i in range(n):    
+            probabilities.append((1-sum(probabilities))/PHI)
+            if rand_num < sum(probabilities):
+                res = i
+                break
+        if self.gender == 'female': res = n - 1 - res
+        return res
+
+            
+
 
 class Examiner:
     name: str
@@ -30,27 +48,73 @@ class Examiner:
     state: str = '-'
     number_of_students: int = 0
     failed_students: int = 0
-    work_time: int = 0
+    start_work_time: int = 0
+    end_work_time: int = None
     student_now: Student = None
+    had_lunch: bool = False
 
     def __init__(self, name, gender):
         self.name = name
         self.gender = gender
+
     def set_student(self, student):
         self.student_now = student
+
     def get_name(self):
         return self.name
+    
     def get_state(self):
         return self.state
+    
     def get_student_now(self):
         return self.student_now
+    
     def get_student_name(self):
-        return '-' if self.student_now == None else self.student_now.get_name()
+        return '-' if self.student_now is None else self.student_now.get_name()
+    
+    def get_work_time(self):
+        return (int(time.time()) if self.end_work_time is None else self.end_work_time) - self.start_work_time
+    
+    def set_start_work(self):
+        self.start_work_time = int(time.time())
+
+    def set_end_work(self):
+        self.end_work_time = int(time.time())
+    
     def sentiment(self) -> int:
-        return random.randint(-1, 1)
+        x = random.randint(-2, 5)
+        res = 1 if x > 0 else -1 if x < 0 else 0
+        return res
+    
     def add_students_count(self, res):
         self.number_of_students += 1
-        if res: self.failed_students += 1
+        if not res: self.failed_students += 1
+    
+    def lunch(self, update_q):
+        self.set_student(None)
+        self.had_lunch = True
+        update_q.put(True)
+        time.sleep(random.uniform(12, 18))
+
+    def quest(self, question: list) -> int:
+        rand_num = random.random()
+        probabilities = []
+        n = len(question)
+        res = n - 1
+        for i in range(n):    
+            probabilities.append((1-sum(probabilities))/PHI)
+            if rand_num < sum(probabilities):
+                res = i
+                break
+        if self.gender == 'female': res = n - 1 - res
+        return res
+
+    def quests(self, question: list) -> list:
+        for _ in range(len()):
+            j = random.randint(len(que)-1)
+            student_answer = examiner.get_student_now().quest(que[j])
+            examiner_answer = examiner.quests(que[j])
+            que.pop(j)
 
 
 
@@ -79,11 +143,13 @@ def read_questions(filename: str) -> list:
 
 
 def exam_output(students: list, examiners: list, time: int, student_queue):
+    #os.system('cls' if os.name == 'nt' else 'clear')
     print_student_exam(students)
     print()
     print_examiners_exam(examiners)
     print('Осталось в очереди: ' + str(min(student_queue.qsize(), len(students))) + ' из ' + str(len(students)))
     print('Время с момента начала экзамена: ' + str(time//60) + '.' + str(time%60))
+    # #os.system('cls' if os.name == 'nt' else 'clear')
 
 def print_student_exam(students: list):
     max_name_len = max(7, max((len(s.get_name()) for s in students), default=0))
@@ -110,7 +176,7 @@ def print_examiners_exam(examiners: list):
         student_name = e.get_student_name().center(17)
         total_students = str(e.number_of_students).center(17)
         failed_students = str(e.failed_students).center(9)
-        work_time = f"{e.work_time:.2f}".center(14)
+        work_time = (str(e.get_work_time()//60) + '.' + str(e.get_work_time()%60)).center(14)
         
         print(f'| {name} |{student_name}|{total_students}|{failed_students}|{work_time}|')
     print('+' + '-' * (max_len_names + 2) + 
@@ -120,15 +186,17 @@ def output_every_second(t: dict, students: list, examiners: list, student_queue,
     exam_output(students, examiners, 0, student_queue)
     while(student_queue.qsize()):
         current_time = time.time()
-        if(current_time - t['update_time'] >= 1 or update_q.qsize > 0):
-            while update_q.qsize > 0: update_q.get()
+        if(current_time - t['update_time'] >= 1 or update_q.qsize() > 0):
+            while update_q.qsize() > 0: update_q.get()
             t['update_time'] = current_time
+            #os.system('cls' if os.name == 'nt' else 'clear')
             exam_output(students, examiners, int(t['update_time'] - t['start_time']), student_queue)
 
 
 
 
 def final_output(students: list, examiners: list):
+    #os.system('cls' if os.name == 'nt' else 'clear')
     print_student_exam(students)
     print()
     print_examiners_exam(examiners)
@@ -145,14 +213,25 @@ def final_output(students: list, examiners: list):
 
 
 def examiner_work(examiner: Examiner, student_queue, questions: list, update_q):
+    examiner.set_start_work()
     examiner.set_student(student_queue.get())
     while(examiner.get_student_name() != '-'):
-        res = examiner.sentiment() > 0
-        time.sleep(3)
+        res = examiner.sentiment()
+        que = questions[::]
+        for _ in range(3):
+            j = random.randint(len(que)-1)
+            student_answer = examiner.get_student_now().quest(que[j])
+            examiner_answer = examiner.quests(que[j])
+            que.pop(j)
+        time.sleep(random.uniform(len(examiner.get_name) - 1, len(examiner.get_name) + 1))
         examiner.get_student_now().set_state('Сдал' if res else 'Провалил')
         examiner.add_students_count(res)
+
+        if examiner.get_work_time() > 30 and not examiner.had_lunch:
+            examiner.lunch(update_q)
         examiner.set_student(student_queue.get())
         update_q.put(True)
+    examiner.set_end_work()
 
 
 
@@ -173,14 +252,14 @@ def main():
 
     t = {'start_time': time.time(), 'update_time': -1}
 
-    threads = (threading.Thread(target = examiner_work, args = (ex, student_queue, questions, update_q)) for ex in examiners)
+    threads = [threading.Thread(target = examiner_work, args = (ex, student_queue, questions, update_q)) for ex in examiners]
     output_thread = threading.Thread(target = output_every_second, args = (t, students, examiners, student_queue, update_q))
     
     output_thread.start()
     for i in threads: i.start()
     for i in threads: i.join()
     output_thread.join()
-
+    #os.system('cls' if os.name == 'nt' else 'clear')
     final_output(students, examiners)
 
 if __name__ == '__main__':
