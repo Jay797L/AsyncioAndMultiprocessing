@@ -4,6 +4,7 @@ import time
 import threading
 import queue
 import os
+import copy
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
@@ -39,7 +40,8 @@ class Student:
         if self.gender == 'female': res = n - 1 - res
         return res
 
-            
+
+
 
 
 class Examiner:
@@ -110,11 +112,14 @@ class Examiner:
         return res
 
     def quests(self, question: list) -> list:
-        for _ in range(len()):
-            j = random.randint(len(que)-1)
-            student_answer = examiner.get_student_now().quest(que[j])
-            examiner_answer = examiner.quests(que[j])
-            que.pop(j)
+        que = question[::]
+        res = []
+        for _ in range(len(question)):
+            answer = self.quest(que)
+            res.append(answer)
+            que.pop(answer)
+            if random.randint(0, 2) > 0: break
+        return res
 
 
 
@@ -140,10 +145,20 @@ def read_questions(filename: str) -> list:
 
 
 
+def sort_students(students: list) -> list:
+    failed = []
+    completed = []
+    queue = []
+    std = copy.deepcopy(students)
+    for i in std:
+        if i.get_state() == "Провалил":
+            failed.append(i)
+
 
 
 def exam_output(students: list, examiners: list, time: int, student_queue):
-    #os.system('cls' if os.name == 'nt' else 'clear')
+    sort_students(students)
+    os.system('cls' if os.name == 'nt' else 'clear')
     print_student_exam(students)
     print()
     print_examiners_exam(examiners)
@@ -189,14 +204,14 @@ def output_every_second(t: dict, students: list, examiners: list, student_queue,
         if(current_time - t['update_time'] >= 1 or update_q.qsize() > 0):
             while update_q.qsize() > 0: update_q.get()
             t['update_time'] = current_time
-            #os.system('cls' if os.name == 'nt' else 'clear')
+            os.system('cls' if os.name == 'nt' else 'clear')
             exam_output(students, examiners, int(t['update_time'] - t['start_time']), student_queue)
 
 
 
 
 def final_output(students: list, examiners: list):
-    #os.system('cls' if os.name == 'nt' else 'clear')
+    os.system('cls' if os.name == 'nt' else 'clear')
     print_student_exam(students)
     print()
     print_examiners_exam(examiners)
@@ -219,11 +234,14 @@ def examiner_work(examiner: Examiner, student_queue, questions: list, update_q):
         res = examiner.sentiment()
         que = questions[::]
         for _ in range(3):
-            j = random.randint(len(que)-1)
+            j = random.randint(0, len(que)-1)
             student_answer = examiner.get_student_now().quest(que[j])
             examiner_answer = examiner.quests(que[j])
             que.pop(j)
-        time.sleep(random.uniform(len(examiner.get_name) - 1, len(examiner.get_name) + 1))
+            if student_answer in examiner_answer:
+                res *= 10
+        res = res < 0 or res > 99
+        time.sleep(random.uniform(len(examiner.get_name()) - 1, len(examiner.get_name()) + 1))
         examiner.get_student_now().set_state('Сдал' if res else 'Провалил')
         examiner.add_students_count(res)
 
@@ -259,7 +277,7 @@ def main():
     for i in threads: i.start()
     for i in threads: i.join()
     output_thread.join()
-    #os.system('cls' if os.name == 'nt' else 'clear')
+    os.system('cls' if os.name == 'nt' else 'clear')
     final_output(students, examiners)
 
 if __name__ == '__main__':
