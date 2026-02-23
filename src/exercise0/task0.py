@@ -9,10 +9,16 @@ import copy
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
 
+best_exam_time = None
+worst_exam_time = None
+best_exam_rate = None
+failed_students = 0
+
 class Student:
     name: str
     gender: str
-    state: str = ' Очередь  '
+    state: str = 'Очередь'
+    exam_time: float = 0
 
     def __init__(self, name, gender):
         self.name = name
@@ -26,6 +32,12 @@ class Student:
     
     def set_state(self, state):
         self.state = state
+
+    def set_exam_time(self, time: float):
+        self.exam_time = time
+
+    def get_exam_time(self):
+        return self.exam_time
 
     def quest(self, question: list) -> int:
         rand_num = random.random()
@@ -121,6 +133,8 @@ class Examiner:
             if random.randint(0, 2) > 0: break
         return res
 
+    def get_rate(self) -> float:
+        return self.number_of_students/ self.failed_students
 
 
 
@@ -153,18 +167,25 @@ def sort_students(students: list) -> list:
     for i in std:
         if i.get_state() == "Провалил":
             failed.append(i)
+        elif i.get_state() == "Сдал":
+            completed.append(i)
+        else:
+            queue.append(i)
+    return queue + completed + failed
 
 
 
 def exam_output(students: list, examiners: list, time: int, student_queue):
-    sort_students(students)
+    stud = sort_students(students)
     os.system('cls' if os.name == 'nt' else 'clear')
-    print_student_exam(students)
+    print("\033[H", end="")
+    # os.system('cls' if os.name == 'nt' else 'clear')
+    print_student_exam(stud)
     print()
     print_examiners_exam(examiners)
-    print('Осталось в очереди: ' + str(min(student_queue.qsize(), len(students))) + ' из ' + str(len(students)))
+    print('Осталось в очереди: ' + str(min(student_queue.qsize(), len(stud))) + ' из ' + str(len(stud)))
     print('Время с момента начала экзамена: ' + str(time//60) + '.' + str(time%60))
-    # #os.system('cls' if os.name == 'nt' else 'clear')
+
 
 def print_student_exam(students: list):
     max_name_len = max(7, max((len(s.get_name()) for s in students), default=0))
@@ -196,6 +217,26 @@ def print_examiners_exam(examiners: list):
         print(f'| {name} |{student_name}|{total_students}|{failed_students}|{work_time}|')
     print('+' + '-' * (max_len_names + 2) + 
           '+-----------------+-----------------+---------+--------------+')
+    
+def print_examiners_final(examiners: list):
+    max_len_names = max(11, max((len(e.get_name()) for e in examiners), default=0))
+    print('+' + '-' * (max_len_names + 2) + 
+          '+-----------------+---------+--------------+')
+    print('| ' + 'Экзаменатор'.ljust(max_len_names) + 
+          ' | Всего студентов | Завалил | Время работы |')
+    print('+' + '-' * (max_len_names + 2) + 
+          '+-----------------+---------+--------------+')
+
+    for e in examiners:
+        name = e.get_name().ljust(max_len_names)
+        total_students = str(e.number_of_students).center(17)
+        failed_students = str(e.failed_students).center(9)
+        work_time = (str(e.get_work_time()//60) + '.' + str(e.get_work_time()%60)).center(14)
+        
+        print(f'| {name} |{total_students}|{failed_students}|{work_time}|')
+    print('+' + '-' * (max_len_names + 2) + 
+          '+-----------------+---------+--------------+')
+
 
 def output_every_second(t: dict, students: list, examiners: list, student_queue, update_q):
     exam_output(students, examiners, 0, student_queue)
@@ -204,30 +245,34 @@ def output_every_second(t: dict, students: list, examiners: list, student_queue,
         if(current_time - t['update_time'] >= 1 or update_q.qsize() > 0):
             while update_q.qsize() > 0: update_q.get()
             t['update_time'] = current_time
-            os.system('cls' if os.name == 'nt' else 'clear')
+            # os.system('cls' if os.name == 'nt' else 'clear')
             exam_output(students, examiners, int(t['update_time'] - t['start_time']), student_queue)
 
 
 
 
-def final_output(students: list, examiners: list):
+
+def final_output(students: list, examiners: list, total_time: int):
+    best_students, worst_students, best_examiners, best_questions, ex_res = results(students, examiners, good_questions, questions)
+    stud = sort_students(students)
     os.system('cls' if os.name == 'nt' else 'clear')
-    print_student_exam(students)
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print_student_exam(stud)
     print()
-    print_examiners_exam(examiners)
+    print_examiners_final(examiners)
     print()
-    print("Время с момента начала экзамена и до момента и его завершения: ")
-    print("Имена лучших студентов: ")
-    print("Имена лучших экзаменаторов: ")
-    print("Имена студентов, которых после экзамена отчислят: ")
-    print("Лучшие вопросы: ")
-    print("Вывод: ")
+    print("Время с момента начала экзамена и до момента и его завершения: ", total_time//60, ':', total_time%60, sep = '')
+    print("Имена лучших студентов:", str(best_students)[1:-1])
+    print("Имена лучших экзаменаторов: ", str(best_examiners)[1:-1])
+    print("Имена студентов, которых после экзамена отчислят: ", str(worst_students)[1:-1])
+    print("Лучшие вопросы: ", str(best_questions)[1:-1])
+    print("Вывод:", ex_res)
 
 
 
 
 
-def examiner_work(examiner: Examiner, student_queue, questions: list, update_q):
+def examiner_work(examiner: Examiner, student_queue, questions: list, update_q, good_questions: list):
     examiner.set_start_work()
     examiner.set_student(student_queue.get())
     while(examiner.get_student_name() != '-'):
@@ -237,8 +282,9 @@ def examiner_work(examiner: Examiner, student_queue, questions: list, update_q):
             j = random.randint(0, len(que)-1)
             student_answer = examiner.get_student_now().quest(que[j])
             examiner_answer = examiner.quests(que[j])
-            que.pop(j)
+            x = que.pop(j)
             if student_answer in examiner_answer:
+                good_questions[questions.index(x)] += 1
                 res *= 10
         res = res < 0 or res > 99
         time.sleep(random.uniform(len(examiner.get_name()) - 1, len(examiner.get_name()) + 1))
@@ -251,15 +297,45 @@ def examiner_work(examiner: Examiner, student_queue, questions: list, update_q):
         update_q.put(True)
     examiner.set_end_work()
 
+def results(students: list, examiners: list, good_questions: list, questions: list) -> tuple:
+    best_students = []
+    worst_students = []
+    best_examiners = []
+    best_questions = []
 
+    for s in students:
+        if s.get_state() == 'Сдал':
+            if best_exam_time is None or s.get_exam_time() < best_exam_time: best_exam_time = s.get_exam_time()
+        else:
+            if worst_exam_time is None or s.get_exam_time() < worst_exam_time: worst_exam_time = s.get_exam_time()
 
+    for e in examiners:
+        if best_exam_rate is None or best_exam_rate < e.get_rate(): best_exam_rate = e.get_rate()
 
+    for s in students:
+        if s.get_state() == 'Сдал':
+            if s.get_exam_time() == best_exam_time: best_students.append(s)
+        else:
+            if s.get_exam_time() == worst_exam_time: worst_students.append(s)
+
+    for e in examiners:
+        if best_exam_rate == e.get_rate(): best_examiners.append(e)
+
+    best_question_rate = max(good_questions)
+    for i in range(len(good_questions)):
+        if good_questions[i] == best_question_rate: best_questions.append(questions[i])
+
+    ex_res = 'экзамен удался' if (len(students) - failed_students) / len(students) > 0.85 else 'экзамен не удался'
+
+    return best_students, worst_students, best_examiners, best_questions, ex_res
 
 def main():
 
     examiners = read_persons("examiners.txt")
     students = read_persons("students.txt")
     questions = read_questions("questions.txt")
+    good_questions = questions[::]
+    for i in good_questions: i = 0
 
     update_q = queue.Queue()
     student_queue = queue.Queue()
@@ -270,15 +346,16 @@ def main():
 
     t = {'start_time': time.time(), 'update_time': -1}
 
-    threads = [threading.Thread(target = examiner_work, args = (ex, student_queue, questions, update_q)) for ex in examiners]
+    threads = [threading.Thread(target = examiner_work, args = (ex, student_queue, questions, update_q, good_questions)) for ex in examiners]
     output_thread = threading.Thread(target = output_every_second, args = (t, students, examiners, student_queue, update_q))
     
     output_thread.start()
     for i in threads: i.start()
     for i in threads: i.join()
     output_thread.join()
-    os.system('cls' if os.name == 'nt' else 'clear')
-    final_output(students, examiners)
+
+    total_time = round(int(time.time() - t['start_time']))
+    final_output(students, examiners, total_time)
 
 if __name__ == '__main__':
     main()
