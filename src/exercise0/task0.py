@@ -1,18 +1,12 @@
 PHI = 1.618033988749895
 import random
 import time
-import threading
-import queue
+import multiprocessing as mp
 import os
 import copy
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
-
-best_exam_time = None
-worst_exam_time = None
-best_exam_rate = None
-failed_students = 0
 
 class Student:
     name: str
@@ -134,7 +128,10 @@ class Examiner:
         return res
 
     def get_rate(self) -> float:
-        return self.number_of_students/ self.failed_students
+        if self.number_of_students > 0:
+            res = (self.number_of_students - self.failed_students)/self.number_of_students
+        else: res = 0
+        return res
 
 
 
@@ -252,7 +249,7 @@ def output_every_second(t: dict, students: list, examiners: list, student_queue,
 
 
 
-def final_output(students: list, examiners: list, total_time: int):
+def final_output(students: list, examiners: list, total_time: int, questions: list, good_questions: list):
     best_students, worst_students, best_examiners, best_questions, ex_res = results(students, examiners, good_questions, questions)
     stud = sort_students(students)
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -303,6 +300,11 @@ def results(students: list, examiners: list, good_questions: list, questions: li
     best_examiners = []
     best_questions = []
 
+    best_exam_time = None
+    worst_exam_time = None
+    best_exam_rate = None
+    failed_students = 0
+
     for s in students:
         if s.get_state() == 'Сдал':
             if best_exam_time is None or s.get_exam_time() < best_exam_time: best_exam_time = s.get_exam_time()
@@ -337,8 +339,8 @@ def main():
     good_questions = questions[::]
     for i in good_questions: i = 0
 
-    update_q = queue.Queue()
-    student_queue = queue.Queue()
+    update_q = mp.Queue()
+    student_queue = mp.Queue()
     for student in students:
         student_queue.put(student)
     for _ in examiners:
@@ -346,8 +348,8 @@ def main():
 
     t = {'start_time': time.time(), 'update_time': -1}
 
-    threads = [threading.Thread(target = examiner_work, args = (ex, student_queue, questions, update_q, good_questions)) for ex in examiners]
-    output_thread = threading.Thread(target = output_every_second, args = (t, students, examiners, student_queue, update_q))
+    threads = [mp.Process(target = examiner_work, args = (ex, student_queue, questions, update_q, good_questions)) for ex in examiners]
+    output_thread = mp.Process(target = output_every_second, args = (t, students, examiners, student_queue, update_q))
     
     output_thread.start()
     for i in threads: i.start()
@@ -355,7 +357,7 @@ def main():
     output_thread.join()
 
     total_time = round(int(time.time() - t['start_time']))
-    final_output(students, examiners, total_time)
+    final_output(students, examiners, total_time, questions, good_questions)
 
 if __name__ == '__main__':
     main()
