@@ -259,10 +259,10 @@ def final_output(students: list, examiners: list, total_time: int, questions: li
     print_examiners_final(examiners)
     print()
     print("Время с момента начала экзамена и до момента и его завершения: ", total_time//60, ':', total_time%60, sep = '')
-    print("Имена лучших студентов:", str(best_students)[1:-1])
-    print("Имена лучших экзаменаторов: ", str(best_examiners)[1:-1])
-    print("Имена студентов, которых после экзамена отчислят: ", str(worst_students)[1:-1])
-    print("Лучшие вопросы: ", str(best_questions)[1:-1])
+    print("Имена лучших студентов:", ', '.join([s.get_name() for s in best_students]) if best_students else "нет")
+    print("Имена лучших экзаменаторов: ", ', '.join([s.get_name() for s in best_examiners]) if best_examiners else "нет")
+    print("Имена студентов, которых после экзамена отчислят: ", ', '.join([s.get_name() for s in worst_students]) if worst_students else "нет")
+    print("Лучшие вопросы: ", str(best_questions)[2:-2])
     print("Вывод:", ex_res)
 
 
@@ -336,8 +336,8 @@ def main():
     examiners = read_persons("examiners.txt")
     students = read_persons("students.txt")
     questions = read_questions("questions.txt")
-    good_questions = questions[::]
-    for i in good_questions: i = 0
+    manager = mp.Manager()
+    good_questions = manager.list([0] * len(questions))
 
     update_q = mp.Queue()
     student_queue = mp.Queue()
