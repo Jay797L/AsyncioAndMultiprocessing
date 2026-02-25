@@ -4,6 +4,7 @@ import time
 import multiprocessing as mp
 import os
 import copy
+import sys  # Добавлено для определения платформы
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
@@ -98,10 +99,9 @@ class Examiner:
         self.number_of_students += 1
         if not res: self.failed_students += 1
     
-    def lunch(self, update_q):
+    def lunch(self):
         self.set_student(None)
         self.had_lunch = True
-        update_q.put(True)
         time.sleep(random.uniform(12, 18))
 
     def quest(self, question: list) -> int:
@@ -172,7 +172,7 @@ def sort_students(students: list) -> list:
 
 
 
-def exam_output(students: list, examiners: list, time: int, student_queue):
+def exam_output(students: list, examiners: list, time: float, q_size):
     stud = sort_students(students)
     os.system('cls' if os.name == 'nt' else 'clear')
     print("\033[H", end="")
@@ -180,8 +180,9 @@ def exam_output(students: list, examiners: list, time: int, student_queue):
     print_student_exam(stud)
     print()
     print_examiners_exam(examiners)
-    print('Осталось в очереди: ' + str(min(student_queue.qsize(), len(stud))) + ' из ' + str(len(stud)))
-    print('Время с момента начала экзамена: ' + str(time//60) + '.' + str(time%60))
+    
+    print('Осталось в очереди: ' + str(min(q_size, len(stud))) + ' из ' + str(len(stud)))
+    print('Время с момента начала экзамена:', time)
 
 
 def print_student_exam(students: list):
@@ -235,15 +236,13 @@ def print_examiners_final(examiners: list):
           '+-----------------+---------+--------------+')
 
 
-def output_every_second(t: dict, students: list, examiners: list, student_queue, update_q):
-    exam_output(students, examiners, 0, student_queue)
-    while(student_queue.qsize()):
+def output_every_second(t: dict, students: list, examiners: list, q_size):
+    exam_output(students, examiners, 0, q_size)
+    while(q_size > 0):
         current_time = time.time()
-        if(current_time - t['update_time'] >= 1 or update_q.qsize() > 0):
-            while update_q.qsize() > 0: update_q.get()
+        if current_time - t['update_time'] >= 0.01:
             t['update_time'] = current_time
-            # os.system('cls' if os.name == 'nt' else 'clear')
-            exam_output(students, examiners, int(t['update_time'] - t['start_time']), student_queue)
+            exam_output(students, examiners, round(t['update_time'] - t['start_time'], 2), q_size)
 
 
 
@@ -259,17 +258,18 @@ def final_output(students: list, examiners: list, total_time: int, questions: li
     print_examiners_final(examiners)
     print()
     print("Время с момента начала экзамена и до момента и его завершения: ", total_time//60, ':', total_time%60, sep = '')
+    # Исправлено: преобразуем объекты в строки для красивого вывода
     print("Имена лучших студентов:", ', '.join([s.get_name() for s in best_students]) if best_students else "нет")
-    print("Имена лучших экзаменаторов: ", ', '.join([s.get_name() for s in best_examiners]) if best_examiners else "нет")
+    print("Имена лучших экзаменаторов: ", ', '.join([e.get_name() for e in best_examiners]) if best_examiners else "нет")
     print("Имена студентов, которых после экзамена отчислят: ", ', '.join([s.get_name() for s in worst_students]) if worst_students else "нет")
-    print("Лучшие вопросы: ", str(best_questions)[2:-2])
+    print("Лучшие вопросы: ", ', '.join([' '.join(q) for q in best_questions]) if best_questions else "нет")
     print("Вывод:", ex_res)
 
 
 
 
 
-def examiner_work(examiner: Examiner, student_queue, questions: list, update_q, good_questions: list):
+def examiner_work(examiner: Examiner, student_queue, questions: list, good_questions: list, lock,  q_size, lock_size):  # Добавлен параметр lock
     examiner.set_start_work()
     examiner.set_student(student_queue.get())
     while(examiner.get_student_name() != '-'):
@@ -281,17 +281,20 @@ def examiner_work(examiner: Examiner, student_queue, questions: list, update_q, 
             examiner_answer = examiner.quests(que[j])
             x = que.pop(j)
             if student_answer in examiner_answer:
-                good_questions[questions.index(x)] += 1
+                # Используем lock для безопасного доступа к общему списку
+                with lock:
+                    good_questions[questions.index(x)] += 1
                 res *= 10
         res = res < 0 or res > 99
         time.sleep(random.uniform(len(examiner.get_name()) - 1, len(examiner.get_name()) + 1))
         examiner.get_student_now().set_state('Сдал' if res else 'Провалил')
         examiner.add_students_count(res)
+        with lock_size:
+            q_size -= 1
 
         if examiner.get_work_time() > 30 and not examiner.had_lunch:
-            examiner.lunch(update_q)
+            examiner.lunch()
         examiner.set_student(student_queue.get())
-        update_q.put(True)
     examiner.set_end_work()
 
 def results(students: list, examiners: list, good_questions: list, questions: list) -> tuple:
@@ -310,6 +313,7 @@ def results(students: list, examiners: list, good_questions: list, questions: li
             if best_exam_time is None or s.get_exam_time() < best_exam_time: best_exam_time = s.get_exam_time()
         else:
             if worst_exam_time is None or s.get_exam_time() < worst_exam_time: worst_exam_time = s.get_exam_time()
+            failed_students += 1  # Добавлен подсчет провалившихся
 
     for e in examiners:
         if best_exam_rate is None or best_exam_rate < e.get_rate(): best_exam_rate = e.get_rate()
@@ -332,24 +336,42 @@ def results(students: list, examiners: list, good_questions: list, questions: li
     return best_students, worst_students, best_examiners, best_questions, ex_res
 
 def main():
+    # Устанавливаем метод запуска для macOS
+    if sys.platform == 'darwin':  # Добавлено для совместимости с macOS
+        mp.set_start_method('fork', force=True)  # Добавлено для совместимости с macOS
 
     examiners = read_persons("examiners.txt")
     students = read_persons("students.txt")
     questions = read_questions("questions.txt")
-    manager = mp.Manager()
-    good_questions = manager.list([0] * len(questions))
+    
+    # СОЗДАЕМ ОБЩИЕ ПЕРЕМЕННЫЕ ДЛЯ ПРОЦЕССОВ:
+    
+    # 1. Создаем Manager для управления общими объектами
+    manager = mp.Manager()  # Добавлено: создаем менеджер для общих данных
+    
+    # 2. Создаем общий список для good_questions через Manager
+    good_questions = manager.list([0] * len(questions))  # Изменено: теперь это общий список для всех процессов
+    
+    # 3. Создаем блокировку для синхронизации доступа к общим данным
+    lock = mp.Lock()  # Добавлено: блокировка для безопасного доступа к good_questions
+    
+    # 4. Создаем общий словарь для времени, чтобы все процессы видели актуальное время
+    #    (оставляем t как обычный словарь, но он будет только в главном процессе)
 
-    update_q = mp.Queue()
     student_queue = mp.Queue()
     for student in students:
         student_queue.put(student)
     for _ in examiners:
         student_queue.put(None)
 
+    q_size = mp.Value('i', len(students))
+    lock_size = mp.Lock()
+
     t = {'start_time': time.time(), 'update_time': -1}
 
-    threads = [mp.Process(target = examiner_work, args = (ex, student_queue, questions, update_q, good_questions)) for ex in examiners]
-    output_thread = mp.Process(target = output_every_second, args = (t, students, examiners, student_queue, update_q))
+    # 5. Передаем lock в процессы экзаменаторов
+    threads = [mp.Process(target = examiner_work, args = (ex, student_queue, questions, good_questions, lock, q_size, lock_size)) for ex in examiners]  # Добавлен lock в аргументы
+    output_thread = mp.Process(target = output_every_second, args = (t, students, examiners, q_size))
     
     output_thread.start()
     for i in threads: i.start()
