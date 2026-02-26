@@ -349,13 +349,13 @@ def main():
     manager = mp.Manager()  # Добавлено: создаем менеджер для общих данных
     
     # 2. Создаем общий список для good_questions через Manager
+    shared_students = manager.list(students)
+    shared_examiners = manager.list(examiners)
     good_questions = manager.list([0] * len(questions))  # Изменено: теперь это общий список для всех процессов
     
     # 3. Создаем блокировку для синхронизации доступа к общим данным
-    lock = mp.Lock()  # Добавлено: блокировка для безопасного доступа к good_questions
-    
-    # 4. Создаем общий словарь для времени, чтобы все процессы видели актуальное время
-    #    (оставляем t как обычный словарь, но он будет только в главном процессе)
+    lock = mp.Lock()
+    lock_size = mp.Lock()
 
     student_queue = mp.Queue()
     for student in students:
@@ -364,13 +364,13 @@ def main():
         student_queue.put(None)
 
     q_size = mp.Value('i', len(students))
-    lock_size = mp.Lock()
+    
 
     t = {'start_time': time.time(), 'update_time': -1}
 
     # 5. Передаем lock в процессы экзаменаторов
-    threads = [mp.Process(target = examiner_work, args = (ex, student_queue, questions, good_questions, lock, q_size, lock_size)) for ex in examiners]  # Добавлен lock в аргументы
-    output_thread = mp.Process(target = output_every_second, args = (t, students, examiners, q_size))
+    threads = [mp.Process(target = examiner_work, args = (ex, student_queue, questions, good_questions, lock, q_size, lock_size)) for ex in shared_examiners]  # Добавлен lock в аргументы
+    output_thread = mp.Process(target = output_every_second, args = (t, shared_students, shared_examiners, q_size))
     
     output_thread.start()
     for i in threads: i.start()
