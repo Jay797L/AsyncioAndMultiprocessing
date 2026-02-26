@@ -54,7 +54,6 @@ class Student:
 class Examiner:
     name: str
     gender: str
-    state: str = '-'
     number_of_students: int = 0
     failed_students: int = 0
     start_work_time: int = 0
@@ -73,7 +72,7 @@ class Examiner:
         return self.name
     
     def get_state(self):
-        return self.state
+        return '-' if self.student_now is None else self.student_now.get_name()
     
     def get_student_now(self):
         return self.student_now
@@ -181,7 +180,7 @@ def exam_output(students: list, examiners: list, time: float, q_size):
     print()
     print_examiners_exam(examiners)
     
-    print('Осталось в очереди: ' + str(min(q_size, len(stud))) + ' из ' + str(len(stud)))
+    print('Осталось в очереди: ' + str(min(q_size.value, len(stud))) + ' из ' + str(len(stud)))
     print('Время с момента начала экзамена:', time)
 
 
@@ -238,7 +237,7 @@ def print_examiners_final(examiners: list):
 
 def output_every_second(t: dict, students: list, examiners: list, q_size):
     exam_output(students, examiners, 0, q_size)
-    while(q_size > 0):
+    while(q_size.value > 0):
         current_time = time.time()
         if current_time - t['update_time'] >= 0.01:
             t['update_time'] = current_time
@@ -290,7 +289,7 @@ def examiner_work(examiner: Examiner, student_queue, questions: list, good_quest
         examiner.get_student_now().set_state('Сдал' if res else 'Провалил')
         examiner.add_students_count(res)
         with lock_size:
-            q_size -= 1
+            q_size.value -= 1
 
         if examiner.get_work_time() > 30 and not examiner.had_lunch:
             examiner.lunch()
