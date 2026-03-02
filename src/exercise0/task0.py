@@ -4,7 +4,6 @@ import time
 import multiprocessing as mp
 import os
 import sys
-import copy
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
@@ -79,14 +78,14 @@ class SharedExaminer:
         return self.student_name.value
     
     def get_work_time(self):
-        end = int(time.time()) if self.end_work_time.value == 0 else self.end_work_time.value
-        return end - self.start_work_time.value
+        end = time.time() if self.end_work_time.value == 0 else self.end_work_time.value
+        return round(end - self.start_work_time.value, 2)
     
     def set_start_work(self):
-        self.start_work_time.value = int(time.time())
+        self.start_work_time.value = time.time()
     
     def set_end_work(self):
-        self.end_work_time.value = int(time.time())
+        self.end_work_time.value = time.time()
     
     def sentiment(self) -> int:
         x = random.randint(-2, 5)
@@ -201,7 +200,7 @@ def exam_output(students, examiners, time_val, q_size, lock_display):
             student_name = e.get_student_name().center(17)
             total_students = str(e.number_of_students.value).center(17)
             failed_students = str(e.failed_students.value).center(9)
-            work_time = (str(e.get_work_time()//60) + '.' + str(e.get_work_time()%60)).center(14)
+            work_time = (str(e.get_work_time())).center(14)
             
             print(f'| {name} |{student_name}|{total_students}|{failed_students}|{work_time}|')
         print('+' + '-' * (max_len_names + 2) + 
@@ -234,7 +233,7 @@ def print_examiners_final(examiners: list):
         name = e.get_name().ljust(max_len_names)
         total_students = str(e.number_of_students.value).center(17)
         failed_students = str(e.failed_students.value).center(9)
-        work_time = (str(e.get_work_time()//60) + '.' + str(e.get_work_time()%60)).center(14)
+        work_time = str(e.get_work_time()).center(14)
         
         print(f'| {name} |{total_students}|{failed_students}|{work_time}|')
     print('+' + '-' * (max_len_names + 2) + 
@@ -288,7 +287,7 @@ def examiner_work(examiner, student_queue, questions, good_questions, lock_good,
         # Проверяем обед
         if examiner.get_work_time() > 30 and not examiner.had_lunch.value:
             examiner.lunch()
-    
+    examiner.set_student(None)
     examiner.set_end_work()
 
 def results(students, examiners, good_questions, questions):
@@ -302,7 +301,6 @@ def results(students, examiners, good_questions, questions):
     best_exam_rate = 0
     failed_students = 0
     
-    # Собираем статистику
     for s in students:
         if s.get_state() == 'Сдал':
             if s.get_exam_time() < best_exam_time:
@@ -317,7 +315,6 @@ def results(students, examiners, good_questions, questions):
         if rate > best_exam_rate:
             best_exam_rate = rate
     
-    # Находим лучших/худших
     for s in students:
         if s.get_state() == 'Сдал':
             if s.get_exam_time() == best_exam_time:
@@ -346,7 +343,6 @@ def final_output(students, examiners, total_time, questions, good_questions):
     stud = sort_students(students)
     os.system('cls' if os.name == 'nt' else 'clear')
     
-    # Вывод студентов
     max_name_len = max(7, max((len(s.get_name()) for s in students), default=0))
     print('+' + '-' * (max_name_len + 2) + '+' + '-' * 10 + '+')
     print('| ' + 'Студент'.ljust(max_name_len) + ' |  Статус  |')
@@ -360,7 +356,7 @@ def final_output(students, examiners, total_time, questions, good_questions):
     
     print_examiners_final(examiners)
     print()
-    print(f"Время с момента начала экзамена и до момента и его завершения: {total_time//60}:{total_time%60:02d}")
+    print(f"Время с момента начала экзамена и до момента и его завершения: {total_time}")
     print("Имена лучших студентов:", ', '.join([s.get_name() for s in best_students]) if best_students else "нет")
     print("Имена лучших экзаменаторов: ", ', '.join([e.get_name() for e in best_examiners]) if best_examiners else "нет")
     print("Имена студентов, которых после экзамена отчислят: ", ', '.join([s.get_name() for s in worst_students]) if worst_students else "нет")
@@ -374,21 +370,17 @@ def main():
         except RuntimeError:
             pass
     
-    # Создаем менеджер для общих объектов
     manager = mp.Manager()
     
-    # Читаем данные и создаем общие объекты
     students = read_persons("students.txt")
     examiners = read_persons("examiners.txt", len(students))
     questions = read_questions("questions.txt")
     
-    # Создаем общие ресурсы
     good_questions = mp.Array('i', [0] * len(questions))
     lock_good = mp.Lock()
     lock_qsize = mp.Lock()
     lock_display = mp.Lock()
     
-    # Очередь студентов (кладем сами объекты)
     student_queue = mp.Queue()
     for student in students:
         student_queue.put(student)
@@ -399,7 +391,6 @@ def main():
     exit_event = mp.Event()
     start_time = time.time()
     
-    # Запускаем экзаменаторов
     examiner_processes = []
     for ex in examiners:
         p = mp.Process(
@@ -410,22 +401,19 @@ def main():
         p.start()
         examiner_processes.append(p)
     
-    # Запускаем вывод
     output_process = mp.Process(
         target=output_every_second,
         args=(start_time, students, examiners, q_size, exit_event, lock_display)
     )
     output_process.start()
     
-    # Ждем завершения
     for p in examiner_processes:
         p.join()
     
     exit_event.set()
     output_process.join()
     
-    # Финальный вывод
-    total_time = round(int(time.time() - start_time))
+    total_time = round(time.time() - start_time, 2)
     final_output(students, examiners, total_time, questions, good_questions[:])
 
 if __name__ == '__main__':
