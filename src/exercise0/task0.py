@@ -170,6 +170,7 @@ def sort_students(students: list) -> list:
 def exam_output(students, examiners, time_val, q_size, lock_display):
     with lock_display:
         os.system('cls' if os.name == 'nt' else 'clear')
+        os.system('cls' if os.name == 'nt' else 'clear')
         print("\033[H", end="")
         
         students_copy = list(students)
@@ -341,6 +342,7 @@ def results(students, examiners, good_questions, questions):
 def final_output(students, examiners, total_time, questions, good_questions):
     best_students, worst_students, best_examiners, best_questions, ex_res = results(students, examiners, good_questions, questions)
     stud = sort_students(students)
+    os.system('cls' if os.name == 'nt' else 'clear')
     os.system('cls' if os.name == 'nt' else 'clear')
     
     max_name_len = max(7, max((len(s.get_name()) for s in students), default=0))
